@@ -75,7 +75,7 @@ defmodule Absinthe.Phase.Document.Arguments.VariableTypesMatch do
         if var_schema_type && arg_schema_type && var_schema_type.name != arg_schema_type.name do
           # The schema and the arg types does not match
           # Log an error and continue
-          Logger.warn("WARNING! The field type and schema types are different")
+          Logger.warn(error_message(op_name, var, var_schema_type.name, arg_schema_type.name))
           node
         else
           node

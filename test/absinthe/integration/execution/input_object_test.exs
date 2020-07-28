@@ -32,6 +32,6 @@ defmodule Elixir.Absinthe.Integration.Execution.InputObjectTest do
     end
 
     assert capture_log([level: :warn], fun) =~
-             "WARNING! The field type and schema types are different"
+             "Variable `$input` of type `Boolean` found as input to argument of type `InputThing`."
   end
 end
