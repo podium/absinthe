@@ -1,5 +1,5 @@
 defmodule Absinthe.Schema.Notation.Experimental.ImportSdlTest do
-  use Absinthe.Case
+  use Absinthe.Case, async: true
   import ExperimentalNotationHelpers
 
   @moduletag :experimental
@@ -21,7 +21,7 @@ defmodule Absinthe.Schema.Notation.Experimental.ImportSdlTest do
 
     # Embedded SDL
     import_sdl """
-    directive @foo(name: String!) on SCALAR | OBJECT
+    directive @foo(name: String!) repeatable on SCALAR | OBJECT
     directive @bar(name: String!) on SCALAR | OBJECT
 
     type Query {
@@ -254,7 +254,7 @@ defmodule Absinthe.Schema.Notation.Experimental.ImportSdlTest do
 
   describe "directives" do
     test "can be defined" do
-      assert %{name: "foo", identifier: :foo, locations: [:object, :scalar]} =
+      assert %{name: "foo", identifier: :foo, locations: [:object, :scalar], repeatable: true} =
                lookup_compiled_directive(Definition, :foo)
 
       assert %{name: "bar", identifier: :bar, locations: [:object, :scalar]} =
@@ -602,13 +602,15 @@ defmodule Absinthe.Schema.Notation.Experimental.ImportSdlTest do
                Absinthe.run(@query, Definition)
 
       assert_receive {[:absinthe, :execute, :operation, :start], _, %{id: id}, _config}
-      assert_receive {[:absinthe, :execute, :operation, :stop], measurements, %{id: ^id}, _config}
 
-      assert_receive {[:absinthe, :resolve, :field, :start], measurements,
-                      %{resolution: %{definition: %{name: "posts"}}}, config}
+      assert_receive {[:absinthe, :execute, :operation, :stop], _measurements, %{id: ^id},
+                      _config}
 
-      assert_receive {[:absinthe, :resolve, :field, :stop], measurements,
-                      %{resolution: %{definition: %{name: "posts"}}}, config}
+      assert_receive {[:absinthe, :resolve, :field, :start], _measurements,
+                      %{resolution: %{definition: %{name: "posts"}}}, _config}
+
+      assert_receive {[:absinthe, :resolve, :field, :stop], _measurements,
+                      %{resolution: %{definition: %{name: "posts"}}}, _config}
     end
   end
 end

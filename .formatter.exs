@@ -18,6 +18,7 @@ locals_without_parens = [
   import_fields: 2,
   import_fields: 1,
   import_types: 1,
+  import_types: 2,
   import_sdl: 1,
   import_sdl: 2,
   input_object: 3,
@@ -32,6 +33,7 @@ locals_without_parens = [
   object: 3,
   on: 1,
   parse: 1,
+  repeatable: 1,
   resolve: 1,
   resolve_type: 1,
   scalar: 2,
@@ -41,7 +43,8 @@ locals_without_parens = [
   types: 1,
   union: 3,
   value: 1,
-  value: 2
+  value: 2,
+  values: 1
 ]
 
 [

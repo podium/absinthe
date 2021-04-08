@@ -6,9 +6,19 @@ defmodule Absinthe.Type.BuiltIns.Introspection do
   object :__schema do
     description "Represents a schema"
 
-    field :types, list_of(:__type) do
+    field :description, :string do
+      resolve(fn _, %{schema: schema} ->
+        {:ok, Absinthe.Schema.lookup_type(schema, :__schema).description}
+      end)
+    end
+
+    field :types, non_null(list_of(non_null(:__type))) do
       resolve fn _, %{schema: schema} ->
-        {:ok, Absinthe.Schema.types(schema)}
+        types =
+          Absinthe.Schema.types(schema)
+          |> Enum.sort_by(& &1.identifier)
+
+        {:ok, types}
       end
     end
 
@@ -31,24 +41,37 @@ defmodule Absinthe.Type.BuiltIns.Introspection do
       end
 
     field :directives,
-      type: list_of(:__directive),
+      type: non_null(list_of(non_null(:__directive))),
       resolve: fn _, %{schema: schema} ->
-        {:ok, Absinthe.Schema.directives(schema)}
+        directives =
+          Absinthe.Schema.directives(schema)
+          |> Enum.sort_by(& &1.identifier)
+
+        {:ok, directives}
       end
   end
 
   object :__directive do
     description "Represents a directive"
 
-    field :name, :string
+    field :name, non_null(:string)
 
     field :description, :string
 
-    field :args,
-      type: list_of(:__inputvalue),
+    field :is_repeatable, non_null(:boolean),
       resolve: fn _, %{source: source} ->
-        structs = source.args |> Map.values()
-        {:ok, structs}
+        {:ok, source.repeatable}
+      end
+
+    field :args,
+      type: non_null(list_of(non_null(:__inputvalue))),
+      resolve: fn _, %{source: source} ->
+        args =
+          source.args
+          |> Map.values()
+          |> Enum.sort_by(& &1.identifier)
+
+        {:ok, args}
       end
 
     field :on_operation,
@@ -72,36 +95,20 @@ defmodule Absinthe.Type.BuiltIns.Introspection do
         {:ok, Enum.member?(source.locations, :field)}
       end
 
-    field :locations, list_of(:__directive_location)
+    field :locations, non_null(list_of(non_null(:__directive_location)))
   end
 
+  enum :__type_kind,
+    values: Absinthe.Introspection.TypeKind.values()
+
   enum :__directive_location,
-    values: [
-      :query,
-      :mutation,
-      :subscription,
-      :field,
-      :fragment_definition,
-      :fragment_spread,
-      :inline_fragment,
-      :schema,
-      :scalar,
-      :object,
-      :field_definition,
-      :interface,
-      :union,
-      :enum,
-      :enum_value,
-      :input_object,
-      :argument_definition,
-      :input_field_definition
-    ]
+    values: Absinthe.Introspection.DirectiveLocation.values()
 
   object :__type do
     description "Represents scalars, interfaces, object types, unions, enums in the system"
 
     field :kind,
-      type: :string,
+      type: non_null(:__type_kind),
       resolve: fn _, %{source: %{__struct__: type}} ->
         {:ok, type.kind}
       end
@@ -110,7 +117,7 @@ defmodule Absinthe.Type.BuiltIns.Introspection do
 
     field :description, :string
 
-    field :fields, list_of(:__field) do
+    field :fields, list_of(non_null(:__field)) do
       arg :include_deprecated, :boolean, default_value: false
 
       resolve fn
@@ -130,6 +137,7 @@ defmodule Absinthe.Type.BuiltIns.Introspection do
                   []
               end
             end)
+            |> Enum.sort_by(& &1.identifier)
 
           {:ok, result}
 
@@ -139,27 +147,30 @@ defmodule Absinthe.Type.BuiltIns.Introspection do
     end
 
     field :interfaces,
-      type: list_of(:__type),
+      type: list_of(non_null(:__type)),
       resolve: fn
         _, %{schema: schema, source: %{interfaces: interfaces}} ->
-          structs =
+          interfaces =
             interfaces
-            |> Enum.map(fn ident ->
-              Absinthe.Schema.lookup_type(schema, ident)
-            end)
+            |> Enum.map(&Absinthe.Schema.lookup_type(schema, &1))
+            |> Enum.sort_by(& &1.identifier)
 
-          {:ok, structs}
+          {:ok, interfaces}
 
         _, _ ->
           {:ok, nil}
       end
 
     field :possible_types,
-      type: list_of(:__type),
+      type: list_of(non_null(:__type)),
       resolve: fn
         _, %{schema: schema, source: %{types: types}} ->
-          structs = types |> Enum.map(&Absinthe.Schema.lookup_type(schema, &1))
-          {:ok, structs}
+          possible_types =
+            types
+            |> Enum.map(&Absinthe.Schema.lookup_type(schema, &1))
+            |> Enum.sort_by(& &1.identifier)
+
+          {:ok, possible_types}
 
         _, %{schema: schema, source: %Absinthe.Type.Interface{identifier: ident}} ->
           {:ok, Absinthe.Schema.implementors(schema, ident)}
@@ -169,7 +180,7 @@ defmodule Absinthe.Type.BuiltIns.Introspection do
       end
 
     field :enum_values,
-      type: list_of(:__enumvalue),
+      type: list_of(non_null(:__enumvalue)),
       args: [
         include_deprecated: [
           type: :boolean,
@@ -187,6 +198,7 @@ defmodule Absinthe.Type.BuiltIns.Introspection do
                 []
               end
             end)
+            |> Enum.sort_by(& &1.value)
 
           {:ok, result}
 
@@ -195,11 +207,15 @@ defmodule Absinthe.Type.BuiltIns.Introspection do
       end
 
     field :input_fields,
-      type: list_of(:__inputvalue),
+      type: list_of(non_null(:__inputvalue)),
       resolve: fn
         _, %{source: %Absinthe.Type.InputObject{fields: fields}} ->
-          structs = fields |> Map.values()
-          {:ok, structs}
+          input_fields =
+            fields
+            |> Map.values()
+            |> Enum.sort_by(& &1.identifier)
+
+          {:ok, input_fields}
 
         _, %{source: _} ->
           {:ok, nil}
@@ -218,7 +234,7 @@ defmodule Absinthe.Type.BuiltIns.Introspection do
 
   object :__field do
     field :name,
-      type: :string,
+      type: non_null(:string),
       resolve: fn _, %{adapter: adapter, source: source} ->
         {:ok, adapter.to_external_name(source.name, :field)}
       end
@@ -226,13 +242,18 @@ defmodule Absinthe.Type.BuiltIns.Introspection do
     field :description, :string
 
     field :args,
-      type: list_of(:__inputvalue),
-      resolve: fn _, %{source: source} ->
-        {:ok, Map.values(source.args)}
+      type: non_null(list_of(non_null(:__inputvalue))),
+      resolve: fn _, %{source: %{args: args}} ->
+        args =
+          args
+          |> Map.values()
+          |> Enum.sort_by(& &1.identifier)
+
+        {:ok, args}
       end
 
     field :type,
-      type: :__type,
+      type: non_null(:__type),
       resolve: fn _, %{schema: schema, source: source} ->
         result =
           case source.type do
@@ -247,7 +268,7 @@ defmodule Absinthe.Type.BuiltIns.Introspection do
       end
 
     field :is_deprecated,
-      type: :boolean,
+      type: non_null(:boolean),
       resolve: fn
         _, %{source: %{deprecation: nil}} ->
           {:ok, false}
@@ -269,7 +290,7 @@ defmodule Absinthe.Type.BuiltIns.Introspection do
 
   object :__inputvalue, name: "__InputValue" do
     field :name,
-      type: :string,
+      type: non_null(:string),
       resolve: fn _, %{adapter: adapter, source: source} ->
         {:ok, adapter.to_external_name(source.name, :field)}
       end
@@ -277,7 +298,7 @@ defmodule Absinthe.Type.BuiltIns.Introspection do
     field :description, :string
 
     field :type,
-      type: :__type,
+      type: non_null(:__type),
       resolve: fn _, %{schema: schema, source: %{type: ident}} ->
         type = Absinthe.Schema.lookup_type(schema, ident, unwrap: false)
         {:ok, type}
@@ -298,12 +319,12 @@ defmodule Absinthe.Type.BuiltIns.Introspection do
   end
 
   object :__enumvalue, name: "__EnumValue" do
-    field :name, :string
+    field :name, non_null(:string)
 
     field :description, :string
 
     field :is_deprecated,
-      type: :boolean,
+      type: non_null(:boolean),
       resolve: fn
         _, %{source: %{deprecation: nil}} ->
           {:ok, false}
@@ -327,7 +348,9 @@ defmodule Absinthe.Type.BuiltIns.Introspection do
     case Absinthe.Schema.lookup_type(schema, type, unwrap: false) do
       %Absinthe.Type.InputObject{fields: fields} ->
         object_values =
-          Map.values(fields)
+          fields
+          |> Map.take(Map.keys(value))
+          |> Map.values()
           |> Enum.map(&render_default_value(schema, adapter, &1, value))
           |> Enum.join(", ")
 

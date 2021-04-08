@@ -1,5 +1,4 @@
 defmodule Mix.Tasks.Absinthe.Schema.Sdl do
-  require Logger
   use Mix.Task
   import Mix.Generator
 
@@ -8,13 +7,11 @@ defmodule Mix.Tasks.Absinthe.Schema.Sdl do
   @default_filename "./schema.graphql"
 
   @moduledoc """
-  Generate a schema.graphql file
-
-  mix absinthe.schema.sdl --schema MySchema
+  Generate a `schema.graphql` file.
 
   ## Usage
 
-      absinthe.schema.sdl [FILENAME] [OPTIONS]
+      mix absinthe.schema.sdl [OPTIONS] [FILENAME]
 
   ## Options
 
@@ -25,11 +22,12 @@ defmodule Mix.Tasks.Absinthe.Schema.Sdl do
 
   Write to default path `#{@default_filename}` using the `:schema` configured for the `:absinthe` application:
 
-    $ mix absinthe.schema.sdl
+      mix absinthe.schema.sdl
 
   Write to path `/path/to/schema.graphql` using the `MySchema` schema
 
-    $ mix absinthe.schema.sdl --schema MySchema /path/to/schema.graphql
+      mix absinthe.schema.sdl --schema MySchema /path/to/schema.graphql
+
   """
 
   defmodule Options do
@@ -47,7 +45,7 @@ defmodule Mix.Tasks.Absinthe.Schema.Sdl do
     Application.ensure_all_started(:absinthe)
 
     Mix.Task.run("loadpaths", argv)
-    Mix.Project.compile(argv)
+    Mix.Task.run("compile", argv)
 
     opts = parse_options(argv)
 

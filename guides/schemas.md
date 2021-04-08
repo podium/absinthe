@@ -30,8 +30,7 @@ end
 ```
 
 
-You may want to refer to the <a href="https://hexdocs.pm/absinthe/">Absinthe API
-documentation</a> for more detailed information as you look this over..
+You may want to refer to the [Absinthe API documentation](https://hexdocs.pm/absinthe/) for more detailed information as you look this over..
 
 
 Some macros and functions used here that are worth mentioning, pulled in automatically from
@@ -60,7 +59,7 @@ end
 
 Now you can use Absinthe to execute a query document. Keep in mind that for
 HTTP, you'll probably want to use
-[Absinthe.Plug](plug-phoenix.html) instead of executing
+[Absinthe.Plug](plug-phoenix.md) instead of executing
 GraphQL query documents yourself. Absinthe doesn't know or care about HTTP,
 but the `absinthe_plug` project does: it handles the vagaries of interacting
 with HTTP GraphQL clients so you don't have to.
@@ -128,4 +127,4 @@ end
 It's a nice way of separating the top-level `query` and `mutation` information,
 which define the surface area of the API, with the actual types that it uses.
 
-See [Importing Types](importing-types.html) for a full guide to importing types.
+See [Importing Types](importing-types.md) for a full guide to importing types.

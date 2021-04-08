@@ -60,7 +60,7 @@ defmodule Absinthe.IntrospectionTest do
                  "isDeprecated" => false,
                  "deprecationReason" => nil
                }
-             ] == values |> Enum.sort_by(& &1["name"])
+             ] == values
     end
 
     test "can use __type and value information without deprecations" do
@@ -263,6 +263,51 @@ defmodule Absinthe.IntrospectionTest do
          }},
         result
       )
+    end
+
+    defmodule ImportFieldsIntoInputSchema do
+      use Absinthe.Schema
+
+      query do
+        field :test, :test_object do
+          arg :test, :test_input
+        end
+      end
+
+      object :test_object do
+        import_fields(:import_object)
+      end
+
+      input_object :test_input do
+        import_fields(:import_object)
+      end
+
+      object :import_object do
+        field :id, :id
+      end
+    end
+
+    test "import_fields won't import __typename" do
+      {:ok, %{data: data}} =
+        """
+        {
+          __schema {
+            types {
+              name
+              inputFields {
+                name
+              }
+            }
+          }
+        }
+        """
+        |> Absinthe.run(ImportFieldsIntoInputSchema)
+
+      type =
+        get_in(data, ["__schema", "types"])
+        |> Enum.find(&(&1["name"] == "TestInput"))
+
+      assert get_in(type, ["inputFields"]) == [%{"name" => "id"}]
     end
   end
 
@@ -544,5 +589,37 @@ defmodule Absinthe.IntrospectionTest do
        }},
       result
     )
+  end
+
+  test "properly render partial default value input objects" do
+    {:ok, result} =
+      """
+      {
+        __schema {
+          queryType {
+            fields {
+              name
+              args {
+                name
+                defaultValue
+              }
+            }
+          }
+        }
+      }
+      """
+      |> run(Absinthe.Fixtures.ArgumentsSchema)
+
+    fields = get_in(result, [:data, "__schema", "queryType", "fields"])
+
+    assert %{
+             "args" => [
+               %{"defaultValue" => "{exclude: [2, 3], include: [1]}", "name" => "filterAll"},
+               %{"defaultValue" => "{}", "name" => "filterEmpty"},
+               %{"defaultValue" => "{exclude: [1, 2, 3]}", "name" => "filterExclude"},
+               %{"defaultValue" => "{include: [1, 2, 3]}", "name" => "filterInclude"}
+             ],
+             "name" => "filterNumbers"
+           } in fields
   end
 end

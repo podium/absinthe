@@ -8,8 +8,6 @@ defmodule Absinthe.Pipeline do
 
   alias Absinthe.Phase
 
-  require Logger
-
   @type data_t :: any
 
   @type phase_config_t :: Phase.t() | {Phase.t(), Keyword.t()}
@@ -85,6 +83,7 @@ defmodule Absinthe.Pipeline do
       Phase.Document.Arguments.FlagInvalid,
       # Validate Full Document
       Phase.Document.Validation.KnownDirectives,
+      Phase.Document.Validation.RepeatableDirectives,
       Phase.Document.Validation.ScalarLeafs,
       Phase.Document.Validation.VariablesAreInputTypes,
       Phase.Document.Validation.ArgumentsOfCorrectType,
@@ -144,14 +143,17 @@ defmodule Absinthe.Pipeline do
       Phase.Schema.Arguments.Data,
       Phase.Schema.Directives,
       Phase.Schema.Validation.DefaultEnumValuePresent,
+      Phase.Schema.Validation.DirectivesMustBeValid,
       Phase.Schema.Validation.InputOutputTypesCorrectlyPlaced,
       Phase.Schema.Validation.InterfacesMustResolveTypes,
       Phase.Schema.Validation.ObjectInterfacesMustBeValid,
       Phase.Schema.Validation.ObjectMustImplementInterfaces,
+      Phase.Schema.Validation.NoInterfaceCyles,
       Phase.Schema.Validation.QueryTypeMustBeObject,
       Phase.Schema.Validation.NamesMustBeValid,
       Phase.Schema.RegisterTriggers,
       Phase.Schema.MarkReferenced,
+      Phase.Schema.ReformatDescriptions,
       # This phase is run again now after additional validations
       {Phase.Schema.Validation.Result, pass: :final},
       Phase.Schema.Build,

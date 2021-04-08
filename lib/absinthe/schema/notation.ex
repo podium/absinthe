@@ -53,6 +53,14 @@ defmodule Absinthe.Schema.Notation do
   @doc """
   Configure a subscription field.
 
+  The first argument to the config function is the field arguments passed in the subscription.
+  The second argument is an `Absinthe.Resolution` struct, which includes information
+  like the context and other execution data.
+
+  ## Placement
+
+  #{Utils.placement_docs(@placement)}
+
   ## Examples
 
   ```elixir
@@ -95,15 +103,26 @@ defmodule Absinthe.Schema.Notation do
 
   @placement {:trigger, [under: [:field]]}
   @doc """
-  Set a trigger for a subscription field.
+  Sets triggers for a subscription, and configures which topics to publish to when that subscription
+  is triggered.
 
-  It accepts one or more mutation field names, and can be called more than once.
+  A trigger is the name of a mutation. When that mutation runs, data is pushed to the clients
+  who are subscribed to the subscription.
 
-  ```
+  A subscription can have many triggers, and a trigger can push to many topics.
+
+  ## Placement
+
+  #{Utils.placement_docs(@placement)}
+
+  ## Example
+
+  ```elixir
   mutation do
     field :gps_event, :gps_event
     field :user_checkin, :user
   end
+
   subscription do
     field :location_update, :user do
       arg :user_id, non_null(:id)
@@ -112,12 +131,14 @@ defmodule Absinthe.Schema.Notation do
         {:ok, topic: args.user_id}
       end
 
-      trigger :gps_event, topic: fn event ->
-        event.user_id
+      trigger :gps_event, topic: fn gps_event ->
+        gps_event.user_id
       end
 
-      trigger :user_checkin, topic: fn user ->
-        [user.id, user.parent_id]
+      # Trigger on a list of mutations
+      trigger [:user_checkin], topic: fn user ->
+        # Returning a list of topics triggers the subscription for each of the topics in the list.
+        [user.id, user.friend.id]
       end
     end
   end
@@ -126,7 +147,7 @@ defmodule Absinthe.Schema.Notation do
   Trigger functions are only called once per event, so database calls within
   them do not present a significant burden.
 
-  See the `subscription/2` macro docs for additional details
+  See the `Absinthe.Schema.subscription/2` macro docs for additional details
   """
   defmacro trigger(mutations, attrs) do
     __CALLER__
@@ -191,10 +212,15 @@ defmodule Absinthe.Schema.Notation do
 
     __CALLER__
     |> recordable!(:object, @placement[:object])
-    |> record!(Schema.ObjectTypeDefinition, identifier, attrs, block)
+    |> record!(
+      Schema.ObjectTypeDefinition,
+      identifier,
+      attrs |> Keyword.update(:description, nil, &wrap_in_unquote/1),
+      block
+    )
   end
 
-  @placement {:interfaces, [under: [:object]]}
+  @placement {:interfaces, [under: [:object, :interface]]}
   @doc """
   Declare implemented interfaces for an object.
 
@@ -273,7 +299,7 @@ defmodule Absinthe.Schema.Notation do
   end
   ```
   """
-  @placement {:interface_attribute, [under: [:object]]}
+  @placement {:interface_attribute, [under: [:object, :interface]]}
   defmacro interface(identifier) do
     __CALLER__
     |> recordable!(:interface_attribute, @placement[:interface_attribute])
@@ -354,6 +380,20 @@ defmodule Absinthe.Schema.Notation do
         end
       end
 
+    block =
+      case Keyword.get(attrs, :meta) do
+        nil ->
+          block
+
+        meta ->
+          meta_ast =
+            quote do
+              meta unquote(meta)
+            end
+
+          [meta_ast, block]
+      end
+
     {func_ast, attrs} = Keyword.pop(attrs, :resolve)
 
     block =
@@ -371,6 +411,9 @@ defmodule Absinthe.Schema.Notation do
       attrs
       |> expand_ast(caller)
       |> Keyword.delete(:args)
+      |> Keyword.delete(:meta)
+      |> Keyword.update(:description, nil, &wrap_in_unquote/1)
+      |> Keyword.update(:default_value, nil, &wrap_in_unquote/1)
       |> handle_deprecate
 
     {attrs, block}
@@ -561,11 +604,12 @@ defmodule Absinthe.Schema.Notation do
   @doc """
   Set the complexity of a field
 
-  For a field, the first argument to the function you supply to complexity/1 is the user arguments -- just as a field's resolver can use user arguments to resolve its value, the complexity function that you provide can use the same arguments to calculate the field's complexity.
+  For a field, the first argument to the function you supply to `complexity/1` is the user arguments -- just as a field's resolver can use user arguments to resolve its value, the complexity function that you provide can use the same arguments to calculate the field's complexity.
 
   The second argument passed to your complexity function is the sum of all the complexity scores of all the fields nested below the current field.
 
-  (If a complexity function accepts three arguments, the third will be an `%Absinthe.Resolution{}` struct, just as with resolvers.)
+  An optional third argument is passed an `Absinthe.Complexity` struct, which includes information
+  like the context passed to `Absinthe.run/3`.
 
   ## Placement
 
@@ -682,7 +726,7 @@ defmodule Absinthe.Schema.Notation do
   defmacro scalar(identifier, attrs, do: block) do
     __CALLER__
     |> recordable!(:scalar, @placement[:scalar])
-    |> record!(Schema.ScalarTypeDefinition, identifier, attrs, block)
+    |> record_scalar!(identifier, attrs, block)
   end
 
   @doc """
@@ -693,13 +737,13 @@ defmodule Absinthe.Schema.Notation do
   defmacro scalar(identifier, do: block) do
     __CALLER__
     |> recordable!(:scalar, @placement[:scalar])
-    |> record!(Schema.ScalarTypeDefinition, identifier, [], block)
+    |> record_scalar!(identifier, [], block)
   end
 
   defmacro scalar(identifier, attrs) do
     __CALLER__
     |> recordable!(:scalar, @placement[:scalar])
-    |> record!(Schema.ScalarTypeDefinition, identifier, attrs, nil)
+    |> record_scalar!(identifier, attrs, nil)
   end
 
   @placement {:serialize, [under: [:scalar]]}
@@ -875,6 +919,23 @@ defmodule Absinthe.Schema.Notation do
     |> record_expand!(func_ast)
   end
 
+  @placement {:repeatable, [under: [:directive]]}
+  @doc """
+  Set whether the directive can be applied multiple times
+  an entity.
+
+  If omitted, defaults to `false`
+
+  ## Placement
+
+  #{Utils.placement_docs(@placement)}
+  """
+  defmacro repeatable(bool) do
+    __CALLER__
+    |> recordable!(:repeatable, @placement[:repeatable])
+    |> record_repeatable!(bool)
+  end
+
   # INPUT OBJECTS
 
   @placement {:input_object, [toplevel: true]}
@@ -897,7 +958,12 @@ defmodule Absinthe.Schema.Notation do
   defmacro input_object(identifier, attrs \\ [], do: block) do
     __CALLER__
     |> recordable!(:input_object, @placement[:input_object])
-    |> record!(Schema.InputObjectTypeDefinition, identifier, attrs, block)
+    |> record!(
+      Schema.InputObjectTypeDefinition,
+      identifier,
+      attrs |> Keyword.update(:description, nil, &wrap_in_unquote/1),
+      block
+    )
   end
 
   # UNIONS
@@ -928,7 +994,12 @@ defmodule Absinthe.Schema.Notation do
   defmacro union(identifier, attrs \\ [], do: block) do
     __CALLER__
     |> recordable!(:union, @placement[:union])
-    |> record!(Schema.UnionTypeDefinition, identifier, attrs, block)
+    |> record!(
+      Schema.UnionTypeDefinition,
+      identifier,
+      attrs |> Keyword.update(:description, nil, &wrap_in_unquote/1),
+      block
+    )
   end
 
   @placement {:types, [under: [:union]]}
@@ -1030,12 +1101,8 @@ defmodule Absinthe.Schema.Notation do
   defp handle_enum_attrs(attrs, env) do
     attrs
     |> expand_ast(env)
-    |> Keyword.update(:values, [], fn values ->
-      Enum.map(values, fn ident ->
-        value_attrs = handle_enum_value_attrs(ident, module: env.module)
-        struct!(Schema.EnumValueDefinition, value_attrs)
-      end)
-    end)
+    |> Keyword.update(:values, [], &[wrap_in_unquote(&1)])
+    |> Keyword.update(:description, nil, &wrap_in_unquote/1)
   end
 
   @placement {:value, [under: [:enum]]}
@@ -1160,7 +1227,9 @@ defmodule Absinthe.Schema.Notation do
 
   Very frequently your schema module will simply have the `query` and `mutation`
   blocks, and you'll want to break out your other types into other modules. This
-  macro imports those types for use the current module
+  macro imports those types for use the current module.
+
+  To selectively import types you can use the `:only` and `:except` opts.
 
   ## Placement
 
@@ -1171,6 +1240,10 @@ defmodule Absinthe.Schema.Notation do
   import_types MyApp.Schema.Types
 
   import_types MyApp.Schema.Types.{TypesA, TypesB}
+
+  import_types MyApp.Schema.Types, only: [:foo]
+
+  import_types MyApp.Schema.Types, except: [:bar]
   ```
   """
   defmacro import_types(type_module_ast, opts \\ []) do
@@ -1259,6 +1332,8 @@ defmodule Absinthe.Schema.Notation do
     raw_attrs
     |> Keyword.put_new(:name, to_string(identifier))
     |> Keyword.put_new(:type, type)
+    |> Keyword.update(:description, nil, &wrap_in_unquote/1)
+    |> Keyword.update(:default_value, nil, &wrap_in_unquote/1)
     |> handle_deprecate
   end
 
@@ -1266,6 +1341,11 @@ defmodule Absinthe.Schema.Notation do
   # Record a directive expand function in the current scope
   def record_expand!(env, func_ast) do
     put_attr(env.module, {:expand, func_ast})
+  end
+
+  @doc false
+  def record_repeatable!(env, bool) do
+    put_attr(env.module, {:repeatable, bool})
   end
 
   @doc false
@@ -1282,6 +1362,7 @@ defmodule Absinthe.Schema.Notation do
       attrs
       |> Keyword.put(:identifier, identifier)
       |> Keyword.put_new(:name, to_string(identifier))
+      |> Keyword.update(:description, nil, &wrap_in_unquote/1)
 
     scoped_def(env, Schema.DirectiveDefinition, identifier, attrs, block)
   end
@@ -1364,40 +1445,43 @@ defmodule Absinthe.Schema.Notation do
     scoped_def(env, :enum, identifier, attrs, block)
   end
 
-  defp reformat_description(text), do: String.trim(text)
-
   @doc false
   # Record a description in the current scope
   def record_description!(env, text_block) do
-    text = reformat_description(text_block)
+    text = wrap_in_unquote(text_block)
+
     put_attr(env.module, {:desc, text})
   end
 
-  def handle_enum_value_attrs(identifier, raw_attrs) do
-    value =
-      case Keyword.get(raw_attrs, :as, identifier) do
-        value when is_tuple(value) ->
-          raise Absinthe.Schema.Notation.Error,
-                "Invalid Enum value for #{inspect(identifier)}. " <>
-                  "Must be a literal term, dynamic values must use `hydrate`"
+  @doc false
+  # Record a scalar
+  def record_scalar!(env, identifier, attrs, block_or_nil) do
+    record!(
+      env,
+      Schema.ScalarTypeDefinition,
+      identifier,
+      attrs |> Keyword.update(:description, nil, &wrap_in_unquote/1),
+      block_or_nil
+    )
+  end
 
-        value ->
-          value
-      end
+  def handle_enum_value_attrs(identifier, raw_attrs, env) do
+    value = Keyword.get(raw_attrs, :as, identifier)
 
     raw_attrs
-    |> expand_ast(raw_attrs)
+    |> expand_ast(env)
     |> Keyword.put(:identifier, identifier)
-    |> Keyword.put(:value, value)
+    |> Keyword.put(:value, wrap_in_unquote(value))
     |> Keyword.put_new(:name, String.upcase(to_string(identifier)))
     |> Keyword.delete(:as)
+    |> Keyword.update(:description, nil, &wrap_in_unquote/1)
     |> handle_deprecate
   end
 
   @doc false
   # Record an enum value in the current scope
   def record_value!(env, identifier, raw_attrs) do
-    attrs = handle_enum_value_attrs(identifier, raw_attrs)
+    attrs = handle_enum_value_attrs(identifier, raw_attrs, env)
     record!(env, Schema.EnumValueDefinition, identifier, attrs, [])
   end
 
@@ -1407,10 +1491,7 @@ defmodule Absinthe.Schema.Notation do
     values =
       values
       |> expand_ast(env)
-      |> Enum.map(fn ident ->
-        value_attrs = handle_enum_value_attrs(ident, module: env.module)
-        struct!(Schema.EnumValueDefinition, value_attrs)
-      end)
+      |> wrap_in_unquote
 
     put_attr(env.module, {:values, values})
   end
@@ -1445,6 +1526,14 @@ defmodule Absinthe.Schema.Notation do
       end
 
     put_attr(env.module, {:middleware, [new_middleware]})
+  end
+
+  # We wrap the value (from the user) in an `unquote` call, so that when the schema `blueprint` is
+  # placed into `__absinthe_blueprint__` via `unquote(Macro.escape(blueprint, unquote: true))` the
+  # value get's unquoted. This allows us to evaluate function calls in the scope of the schema
+  # module.
+  defp wrap_in_unquote(value) do
+    {:unquote, [], [value]}
   end
 
   # ------------------------------
@@ -1582,11 +1671,7 @@ defmodule Absinthe.Schema.Notation do
     for {_, _, leaf} <- modules_ast_list do
       type_module = Module.concat([root_module_with_alias | leaf])
 
-      if Code.ensure_loaded?(type_module) do
-        do_import_types(type_module, env, opts)
-      else
-        raise ArgumentError, "module #{type_module} is not available"
-      end
+      do_import_types(type_module, env, opts)
     end
   end
 
@@ -1829,6 +1914,18 @@ defmodule Absinthe.Schema.Notation do
 
   defp expand_ast(ast, env) do
     Macro.prewalk(ast, fn
+      # We don't want to expand `@bla` into `Module.get_attribute(module, @bla)` because this
+      # function call will fail if the module is already compiled. Remember that the ast gets put
+      # into a generated `__absinthe_blueprint__` function which is called at "__after_compile__"
+      # time. This will be after a module has been compiled if there are multiple modules in the
+      # schema (in the case of an `import_types`).
+      #
+      # Also see test "test/absinthe/type/import_types_test.exs"
+      # "__absinthe_blueprint__ is callable at runtime even if there is a module attribute"
+      # and it's comment for more information
+      {:@, _, _} = node ->
+        node
+
       {_, _, _} = node ->
         Macro.expand(node, env)
 

@@ -25,7 +25,12 @@ defmodule Absinthe.Phase.Schema.Validation.ObjectMustImplementInterfaces do
     obj
   end
 
-  defp validate_objects(%Blueprint.Schema.ObjectTypeDefinition{} = object, ifaces, types) do
+  @interface_types [
+    Blueprint.Schema.ObjectTypeDefinition,
+    Blueprint.Schema.InterfaceTypeDefinition
+  ]
+
+  defp validate_objects(%struct{} = object, ifaces, types) when struct in @interface_types do
     Enum.reduce(object.interfaces, object, fn ident, object ->
       case Map.fetch(ifaces, ident) do
         {:ok, iface} -> validate_object(object, iface, types)
@@ -162,6 +167,15 @@ defmodule Absinthe.Phase.Schema.Validation.ObjectMustImplementInterfaces do
          types
        ) do
     check_covariant(inner_type1, inner_type2, field_ident, types)
+  end
+
+  defp check_covariant(
+         itype,
+         %Absinthe.Blueprint.TypeReference.NonNull{of_type: inner_type},
+         field_ident,
+         types
+       ) do
+    check_covariant(itype, inner_type, field_ident, types)
   end
 
   defp check_covariant(%{identifier: identifier}, %{identifier: identifier}, _field_ident, _types) do

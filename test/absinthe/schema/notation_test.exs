@@ -16,6 +16,8 @@ defmodule Absinthe.Schema.NotationTest do
       assert_no_notation_error("ArgDirectiveValid", """
       directive :test do
         arg :if, :boolean
+
+        on :field
       end
       """)
     end
@@ -35,6 +37,7 @@ defmodule Absinthe.Schema.NotationTest do
     test "can be toplevel" do
       assert_no_notation_error("DirectiveValid", """
       directive :foo do
+        on :field
       end
       """)
     end
@@ -138,6 +141,7 @@ defmodule Absinthe.Schema.NotationTest do
       assert_no_notation_error("InstructionValid", """
       directive :bar do
         expand fn _, _ -> :ok end
+        on :field
       end
       """)
     end
@@ -200,19 +204,32 @@ defmodule Absinthe.Schema.NotationTest do
           interface :foo
         end
         """,
-        "Invalid schema notation: `interface_attribute` must only be used within `object`"
+        "Invalid schema notation: `interface_attribute` must only be used within `object`, `interface`"
       )
     end
   end
 
   describe "interfaces" do
     test "can be under object as an attribute" do
-      assert_no_notation_error("InterfacesValid", """
+      assert_no_notation_error("ObjectInterfacesValid", """
       interface :bar do
         field :name, :string
         resolve_type fn _, _ -> :foo end
       end
       object :foo do
+        field :name, :string
+        interfaces [:bar]
+      end
+      """)
+    end
+
+    test "can be under interface as an attribute" do
+      assert_no_notation_error("InterfaceInterfacesValid", """
+      interface :bar do
+        field :name, :string
+        resolve_type fn _, _ -> :foo end
+      end
+      interface :foo do
         field :name, :string
         interfaces [:bar]
       end
@@ -228,7 +245,7 @@ defmodule Absinthe.Schema.NotationTest do
         end
         interfaces [:bar]
         """,
-        "Invalid schema notation: `interfaces` must only be used within `object`"
+        "Invalid schema notation: `interfaces` must only be used within `object`, `interface`"
       )
     end
   end
@@ -320,7 +337,7 @@ defmodule Absinthe.Schema.NotationTest do
     test "can be under directive as an attribute" do
       assert_no_notation_error("OnValid", """
       directive :foo do
-        on [Foo, Bar]
+        on [:fragment_spread, :mutation]
       end
       """)
     end
@@ -329,7 +346,7 @@ defmodule Absinthe.Schema.NotationTest do
       assert_notation_error(
         "OnInvalid",
         """
-        on [Foo, Bar]
+        on [:fragment_spread, :mutation]
         """,
         "Invalid schema notation: `on` must only be used within `directive`"
       )

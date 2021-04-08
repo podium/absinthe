@@ -1,5 +1,5 @@
-defmodule SdlRenderTest do
-  use ExUnit.Case
+defmodule Absinthe.Schema.SdlRenderTest do
+  use ExUnit.Case, async: true
 
   defmodule SdlTestSchema do
     use Absinthe.Schema
@@ -7,11 +7,12 @@ defmodule SdlRenderTest do
     alias Absinthe.Blueprint.Schema
 
     @sdl """
+    "Schema description"
     schema {
       query: Query
     }
 
-    directive @foo(name: String!) on OBJECT | SCALAR
+    directive @foo(name: String!) repeatable on OBJECT | SCALAR
 
     interface Animal {
       legCount: Int!
@@ -52,6 +53,7 @@ defmodule SdlRenderTest do
       defaultInputArg(input: ComplexInput = {foo: "bar"}): String
       defaultListArg(things: [String] = ["ThisThing"]): [String]
       defaultEnumArg(category: Category = NEWS): Category
+      defaultNullStringArg(name: String = null): String
       animal: Animal
     }
 
@@ -75,8 +77,9 @@ defmodule SdlRenderTest do
       CLASSIFIED
     }
 
-    interface Pet {
+    interface Pet implements Animal {
       name: String!
+      legCount: Int!
     }
 
     "One or the other"
@@ -125,7 +128,7 @@ defmodule SdlRenderTest do
 
     test "for an interface" do
       assert_rendered("""
-      interface Entity {
+      interface Entity implements Node {
         name: String!
       }
       """)
@@ -183,6 +186,8 @@ defmodule SdlRenderTest do
     use Absinthe.Schema
 
     query do
+      description "Escaped\t\"descrição/description\""
+
       field :echo, :string do
         arg :times, :integer, default_value: 10, description: "The number of times"
         arg :time_interval, :integer
@@ -191,16 +196,25 @@ defmodule SdlRenderTest do
       field :search, :search_result
     end
 
+    directive :foo do
+      arg :baz, :string
+
+      on :field
+    end
+
     enum :order_status do
       value :delivered
       value :processing
       value :picking
     end
 
+    enum :status, values: [:one, :two, :three]
+
     object :order do
       field :id, :id
       field :name, :string
       field :status, :order_status
+      field :other_status, :status
       import_fields :imported_fields
     end
 
@@ -220,10 +234,14 @@ defmodule SdlRenderTest do
   test "Render SDL from blueprint defined with macros" do
     assert Absinthe.Schema.to_sdl(MacroTestSchema) ==
              """
+             "Represents a schema"
              schema {
                query: RootQueryType
              }
 
+             directive @foo(baz: String) on FIELD
+
+             "Escaped\\t\\\"descrição\\/description\\\""
              type RootQueryType {
                echo(
                  "The number of times"
@@ -240,6 +258,12 @@ defmodule SdlRenderTest do
 
              union SearchResult = Order | Category
 
+             enum Status {
+               ONE
+               TWO
+               THREE
+             }
+
              enum OrderStatus {
                DELIVERED
                PROCESSING
@@ -251,6 +275,7 @@ defmodule SdlRenderTest do
                id: ID
                name: String
                status: OrderStatus
+               otherStatus: Status
              }
              """
   end

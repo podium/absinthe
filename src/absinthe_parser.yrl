@@ -17,7 +17,7 @@ Nonterminals
 
 Terminals
   '{' '}' '(' ')' '[' ']' '!' ':' '@' '$' '=' '|' '...'
-  'query' 'mutation' 'subscription' 'fragment' 'on' 'directive'
+  'query' 'mutation' 'subscription' 'fragment' 'on' 'directive' 'repeatable'
   'type' 'implements' 'interface' 'union' 'scalar' 'enum' 'input' 'extend' 'schema'
   name int_value float_value string_value block_string_value boolean_value null.
 
@@ -55,6 +55,7 @@ VariableDefinitionList -> VariableDefinition : ['$1'].
 VariableDefinitionList -> VariableDefinition VariableDefinitionList : ['$1'|'$2'].
 VariableDefinition -> Variable ':' Type : build_ast_node('VariableDefinition', #{'variable' => '$1', 'type' => '$3'}, extract_child_location('$1')).
 VariableDefinition -> Variable ':' Type DefaultValue : build_ast_node('VariableDefinition', #{'variable' => '$1', 'type' => '$3', 'default_value' => '$4'}, extract_child_location('$1')).
+VariableDefinition -> Variable ':' Type DefaultValue Directives : build_ast_node('VariableDefinition', #{'variable' => '$1', 'type' => '$3', 'default_value' => '$4', 'directives' => '$5'}, extract_child_location('$1')).
 Variable -> '$' NameWithoutOn : build_ast_node('Variable', #{'name' => extract_binary('$2')}, extract_location('$1')).
 Variable -> '$' 'on' : build_ast_node('Variable', #{'name' => extract_binary('$2')}, extract_location('$1')).
 
@@ -194,6 +195,18 @@ DirectiveDefinition -> 'directive' '@' Name 'on' DirectiveDefinitionLocations Di
 DirectiveDefinition -> 'directive' '@' Name ArgumentsDefinition 'on' DirectiveDefinitionLocations Directives :
   build_ast_node('DirectiveDefinition', #{'name' => extract_binary('$3'), 'arguments' => '$4', 'directives' => '$7', 'locations' => extract_directive_locations('$6')}, extract_location('$1')).
 
+DirectiveDefinition -> 'directive' '@' Name 'repeatable' 'on' DirectiveDefinitionLocations :
+  build_ast_node('DirectiveDefinition', #{'name' => extract_binary('$3'), 'locations' => extract_directive_locations('$6'), 'repeatable' => true}, extract_location('$1')).
+DirectiveDefinition -> 'directive' '@' Name ArgumentsDefinition 'repeatable' 'on' DirectiveDefinitionLocations :
+  build_ast_node('DirectiveDefinition', #{'name' => extract_binary('$3'), 'arguments' => '$4', 'locations' => extract_directive_locations('$7'), 'repeatable' => true}, extract_location('$1')).
+
+DirectiveDefinition -> 'directive' '@' Name 'repeatable' 'on' DirectiveDefinitionLocations Directives :
+  build_ast_node('DirectiveDefinition', #{'name' => extract_binary('$3'), 'directives' => '$7', 'locations' => extract_directive_locations('$6'), 'repeatable' => true}, extract_location('$1')).
+DirectiveDefinition -> 'directive' '@' Name ArgumentsDefinition 'repeatable' 'on' DirectiveDefinitionLocations Directives :
+  build_ast_node('DirectiveDefinition', #{'name' => extract_binary('$3'), 'arguments' => '$4', 'directives' => '$8', 'locations' => extract_directive_locations('$7'), 'repeatable' => true}, extract_location('$1')).
+
+
+
 SchemaDefinition -> 'schema' : build_ast_node('SchemaDeclaration', #{}, extract_location('$1')).
 SchemaDefinition -> 'schema' Directives : build_ast_node('SchemaDeclaration', #{'directives' => '$2'}, extract_location('$1')).
 SchemaDefinition -> 'schema' '{' FieldDefinitionList '}' : build_ast_node('SchemaDeclaration', #{'fields' => '$3'}, extract_location('$1')).
@@ -249,6 +262,11 @@ InterfaceTypeDefinition -> 'interface' Name '{' FieldDefinitionList '}' :
   build_ast_node('InterfaceTypeDefinition', #{'name' => extract_binary('$2'), 'fields' => '$4'}, extract_location('$1')).
 InterfaceTypeDefinition -> 'interface' Name Directives '{' FieldDefinitionList '}' :
   build_ast_node('InterfaceTypeDefinition', #{'name' => extract_binary('$2'), 'directives' => '$3', 'fields' => '$5'}, extract_location('$1')).
+InterfaceTypeDefinition -> 'interface' Name ImplementsInterfaces '{' FieldDefinitionList '}' :
+  build_ast_node('InterfaceTypeDefinition', #{'name' => extract_binary('$2'), 'interfaces' => '$3', 'fields' => '$5'}, extract_location('$1')).
+InterfaceTypeDefinition -> 'interface' Name ImplementsInterfaces Directives '{' FieldDefinitionList '}' :
+  build_ast_node('InterfaceTypeDefinition', #{'name' => extract_binary('$2'), 'interfaces' => '$3', 'directives' => '$4', 'fields' => '$6'}, extract_location('$1')).
+
 
 UnionTypeDefinition -> 'union' Name :
   build_ast_node('UnionTypeDefinition', #{'name' => extract_binary('$2')}, extract_location('$1')).
@@ -361,36 +379,7 @@ put_description(Node, Description) ->
 % String
 
 extract_quoted_string_token({_Token, _Loc, Value}) ->
-  unicode:characters_to_binary(process_string(lists:sublist(Value, 2, length(Value) - 2))).
-
-process_string(Escaped) ->
-  process_string(Escaped, []).
-
-process_string([], Acc) ->
-  lists:reverse(Acc);
-process_string([$\\, $" | T], Acc) ->
-  process_string(T, [$" | Acc]);
-process_string([$\\, $\\ | T], Acc) ->
-  process_string(T, [$\\ | Acc]);
-process_string([$\\, $/ | T], Acc) ->
-  process_string(T, [$/ | Acc]);
-process_string([$\\, $b | T], Acc) ->
-  process_string(T, [$\b | Acc]);
-process_string([$\\, $f | T], Acc) ->
-  process_string(T, [$\f | Acc]);
-process_string([$\\, $n | T], Acc) ->
-  process_string(T, [$\n | Acc]);
-process_string([$\\, $r | T], Acc) ->
-  process_string(T, [$\r | Acc]);
-process_string([$\\, $t | T], Acc) ->
-  process_string(T, [$\t | Acc]);
-process_string([$\\, $u, A, B, C, D | T], Acc) ->
-  process_string(T, [hexlist_to_utf8_binary([A, B, C, D]) | Acc]);
-process_string([H | T], Acc) ->
-  process_string(T, [H | Acc]).
-
-hexlist_to_utf8_binary(HexList) ->
-  unicode:characters_to_binary([httpd_util:hexlist_to_integer(HexList)]).
+  unicode:characters_to_binary(lists:sublist(Value, 2, length(Value) - 2)).
 
 % Block String
 
