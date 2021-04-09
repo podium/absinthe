@@ -21,7 +21,7 @@ defmodule Absinthe.Phase.Document.Validation.VariablesOfCorrectTypeTest do
     end
 
     assert capture_log([level: :warn], fun) =~
-             "WARNING! The field type and schema types are different"
+             "In operation `test, variable `$intArg` of type `Int` found as input to argument of type `String`."
   end
 
   test "variable type check handles non existent type" do
@@ -58,7 +58,7 @@ defmodule Absinthe.Phase.Document.Validation.VariablesOfCorrectTypeTest do
     end
 
     assert capture_log([level: :warn], fun) =~
-             "WARNING! The field type and schema types are different"
+             "In operation `test, variable `$intArg` of type `Int` found as input to argument of type `String`."
   end
 
   test "types of variables does not match types of arguments in named fragments" do
@@ -81,6 +81,6 @@ defmodule Absinthe.Phase.Document.Validation.VariablesOfCorrectTypeTest do
     end
 
     assert capture_log([level: :warn], fun) =~
-             "WARNING! The field type and schema types are different"
+             "In operation `test, variable `$intArg` of type `Int` found as input to argument of type `String`."
   end
 end
