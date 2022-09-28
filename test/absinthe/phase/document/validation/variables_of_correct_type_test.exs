@@ -22,7 +22,7 @@ defmodule Absinthe.Phase.Document.Validation.VariablesOfCorrectTypeTest do
         variables: %{"intArg" => 5}
       )
 
-    expected_error_msg = error_message("test", "intArg", "Int!", "String")
+    expected_error_msg = error_message("test", "intArg", "Int", "String")
     assert expected_error_msg in (errors |> Enum.map(& &1.message))
   end
 
@@ -40,8 +40,7 @@ defmodule Absinthe.Phase.Document.Validation.VariablesOfCorrectTypeTest do
         variables: %{"intArg" => 5}
       )
 
-    expected_error_msg = error_message("test", "intArg", "DoesNotExist!", "String")
-
+    expected_error_msg = "Argument \"stringArg\" has invalid value $intArg."
     assert expected_error_msg in (errors |> Enum.map(& &1.message))
   end
 
@@ -85,6 +84,10 @@ defmodule Absinthe.Phase.Document.Validation.VariablesOfCorrectTypeTest do
     assert expected_error_msg in (errors |> Enum.map(& &1.message))
   end
 
+  # This is one of the cases that the breaking change fixes (and correctly
+  # validates). Re-enable this test once we use the latest version of
+  # Absinthe.Phase.Document.Arguments.VariableTypesMatch
+  @tag :skip
   test "non null types of variables match non null types of arguments" do
     {:ok, %{errors: errors}} =
       Absinthe.run(
