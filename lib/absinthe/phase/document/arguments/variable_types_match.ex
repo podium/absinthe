@@ -7,6 +7,8 @@ defmodule Absinthe.Phase.Document.Arguments.VariableTypesMatch do
 
   use Absinthe.Phase
 
+  require Logger
+
   alias Absinthe.Blueprint
   alias Absinthe.Blueprint.Document.{Operation, Fragment}
   alias Absinthe.Type
@@ -47,12 +49,67 @@ defmodule Absinthe.Phase.Document.Arguments.VariableTypesMatch do
 
   def check_variable_types(%Operation{} = op) do
     variable_defs = Map.new(op.variable_definitions, &{&1.name, &1})
+
+    # This is the new/breaking implementation which will now only log warnings
+    # for type mismatches.
     Blueprint.prewalk(op, &check_variable_type(&1, op.name, variable_defs))
+
+    # This is the legacy implementation that we will continue to use until
+    # everything is patched.
+    Blueprint.prewalk(op, &check_var_type(&1, op.name, variable_defs))
   end
 
   def check_variable_types(%Operation{} = op, %Fragment.Named{} = fragment) do
     variable_defs = Map.new(op.variable_definitions, &{&1.name, &1})
+
+    # This is the new/breaking implementation which will now only log warnings
+    # for type mismatches.
     Blueprint.prewalk(fragment, &check_variable_type(&1, op.name, variable_defs))
+
+    # This is the legacy implementation that we will continue to use until
+    # everything is patched.
+    Blueprint.prewalk(fragment, &check_var_type(&1, op.name, variable_defs))
+  end
+
+  defp check_var_type(%{schema_node: nil} = node, _, _) do
+    {:halt, node}
+  end
+
+  defp check_var_type(
+         %Blueprint.Input.Value{
+           raw: %{content: %Blueprint.Input.Variable{} = var},
+           schema_node: schema_node
+         } = node,
+         op_name,
+         variable_defs
+       ) do
+    case Map.fetch(variable_defs, var.name) do
+      {:ok, %{schema_node: var_schema_type}} ->
+        # null vs not null is handled elsewhere
+        var_schema_type = Absinthe.Type.unwrap(var_schema_type)
+        arg_schema_type = Absinthe.Type.unwrap(schema_node)
+
+        if var_schema_type && arg_schema_type && var_schema_type.name != arg_schema_type.name do
+          # error
+          var_with_error =
+            put_error(var, %Absinthe.Phase.Error{
+              phase: __MODULE__,
+              message: error_message(op_name, var, var_schema_type.name, arg_schema_type.name),
+              locations: [var.source_location]
+            })
+
+          {:halt, put_in(node.raw.content, var_with_error)}
+        else
+          node
+        end
+
+      _ ->
+        node
+    end
+  end
+
+  defp check_var_type(node, _, _) do
+    node
   end
 
   defp check_variable_type(%{schema_node: nil} = node, _, _) do
@@ -81,12 +138,15 @@ defmodule Absinthe.Phase.Document.Arguments.VariableTypesMatch do
            ) do
           node
         else
+          variable_error = error(operation_name, variable, variable_definition, location_type)
+
           variable =
             put_error(
               variable,
-              error(operation_name, variable, variable_definition, location_type)
+              variable_error
             )
 
+          Logger.warn("VariableTypesMatch: #{variable_error.message}")
           {:halt, put_in(node.input_value.raw.content, variable)}
         end
 
