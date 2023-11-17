@@ -11,11 +11,12 @@ defmodule Absinthe.Phase.Validation.KnownTypeNames do
   # }
   # ```
 
+  require Logger
+
   alias Absinthe.{Blueprint, Phase}
   alias Absinthe.Phase.Document.Validation.Utils
 
   use Absinthe.Phase
-  use Absinthe.Phase.Validation
 
   @doc """
   Run the validation.
@@ -34,7 +35,7 @@ defmodule Absinthe.Phase.Validation.KnownTypeNames do
     |> put_error(error(node, name))
   end
 
-  defp handle_node(%Blueprint.Document.VariableDefinition{} = node, schema) do
+  defp handle_node(%Blueprint.Document.VariableDefinition{schema_node: nil} = node, schema) do
     name = Blueprint.TypeReference.unwrap(node.type).name
     inner_schema_type = schema.__absinthe_lookup__(name)
 
@@ -46,6 +47,21 @@ defmodule Absinthe.Phase.Validation.KnownTypeNames do
       node
       |> flag_invalid(:bad_type_name)
       |> put_error(error(node, name, suggestions))
+    end
+  end
+
+  defp handle_node(%Blueprint.Document.VariableDefinition{} = node, schema) do
+    name = Blueprint.TypeReference.unwrap(node.type).name
+    inner_schema_type = schema.__absinthe_lookup__(name)
+
+    if inner_schema_type do
+      node
+    else
+      suggestions = suggested_type_names(schema, name)
+      error = error(node, name, suggestions)
+
+      Logger.warn("KnownTypeNames error: #{error.message}")
+      node
     end
   end
 

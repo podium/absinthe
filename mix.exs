@@ -2,13 +2,13 @@ defmodule Absinthe.Mixfile do
   use Mix.Project
 
   @source_url "https://github.com/absinthe-graphql/absinthe"
-  @version "1.7.0"
+  @version "1.7.5"
 
   def project do
     [
       app: :absinthe,
       version: @version,
-      elixir: "~> 1.10",
+      elixir: "~> 1.11",
       elixirc_paths: elixirc_paths(Mix.env()),
       build_embedded: Mix.env() == :prod,
       start_permanent: Mix.env() == :prod,
@@ -30,9 +30,11 @@ defmodule Absinthe.Mixfile do
       ],
       deps: deps(),
       dialyzer: [
-        plt_core_path: "priv/plts",
+        plt_add_deps: :apps_direct,
+        plt_file: {:no_warn, "priv/plts/project.plt"},
         plt_add_apps: [:mix, :dataloader, :decimal, :ex_unit]
-      ]
+      ],
+      prune_code_paths: prune_code_paths(Mix.env())
     ]
   end
 
@@ -73,8 +75,9 @@ defmodule Absinthe.Mixfile do
     [
       {:nimble_parsec, "~> 1.2.2 or ~> 1.3.0"},
       {:telemetry, "~> 1.0 or ~> 0.4"},
-      {:dataloader, "~> 1.0.0", optional: true},
+      {:dataloader, "~> 1.0.0 or ~> 2.0", optional: true},
       {:decimal, "~> 1.0 or ~> 2.0", optional: true},
+      {:opentelemetry_process_propagator, "~> 0.2.1", optional: true},
       {:ex_doc, "~> 0.22", only: :dev},
       {:benchee, ">= 1.0.0", only: :dev},
       {:dialyxir, "~> 1.1.0", only: [:dev, :test], runtime: false},
@@ -82,6 +85,9 @@ defmodule Absinthe.Mixfile do
       {:makeup_graphql, "~> 0.1.0", only: :dev}
     ]
   end
+
+  defp prune_code_paths(:test), do: false
+  defp prune_code_paths(_), do: true
 
   #
   # Documentation
@@ -152,7 +158,6 @@ defmodule Absinthe.Mixfile do
         Absinthe.Type,
         Absinthe.Type.Custom,
         Absinthe.Type.Argument,
-        Absinthe.Type.Custom,
         Absinthe.Type.Directive,
         Absinthe.Type.Enum,
         Absinthe.Type.Enum.Value,

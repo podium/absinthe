@@ -63,7 +63,7 @@ defmodule Absinthe.Phase.Validation.KnownTypeNamesTest do
     test "unknown type names are invalid" do
       assert_fails_validation(
         """
-        query Foo($var: JumbledUpLetters, $foo: Boolen!, $bar: [Bar!]) {
+        query Foo($var: JumbledUpLetters, $foo: Boolen, $bar: [Bar!]) {
           user(id: 4) {
             name
             pets { ... on Badger { name }, ...PetFields }
@@ -82,9 +82,28 @@ defmodule Absinthe.Phase.Validation.KnownTypeNamesTest do
             1,
             ~s(Unknown type "Boolen". Did you mean "Alien" or "Boolean"?)
           ),
-          unknown_type(:variable_definition, "Bar", 1),
           unknown_type(:inline_type_condition, "Badger", 4),
           unknown_type(:named_type_condition, "Peettt", 7)
+        ]
+      )
+    end
+
+    test "does not invalidate wrapped invalid type names" do
+      assert_fails_validation(
+        """
+        query Foo($var: JumbledUpLetters, $foo: Boolen!, $bar: [Bar!]) {
+          user(id: 4) {
+            name
+            pets { ... on Badger { name }, ...PetFields }
+          }
+        }
+        fragment PetFields on Peettt {
+          name
+        }
+        """,
+        [],
+        [
+          unknown_type(:variable_definition, "JumbledUpLetters", 1)
         ]
       )
     end

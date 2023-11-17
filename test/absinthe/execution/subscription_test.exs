@@ -3,11 +3,53 @@ defmodule Absinthe.Execution.SubscriptionTest do
 
   import ExUnit.CaptureLog
 
+  defmodule ResultPhase do
+    @moduledoc false
+
+    alias Absinthe.Blueprint
+    use Absinthe.Phase
+
+    def run(%Blueprint{} = bp, _options \\ []) do
+      result = Map.merge(bp.result, process(bp))
+      {:ok, %{bp | result: result}}
+    end
+
+    defp process(blueprint) do
+      data = data(blueprint.execution.result)
+      %{data: data}
+    end
+
+    defp data(%{value: value}), do: value
+
+    defp data(%{fields: []} = result) do
+      result.root_value
+    end
+
+    defp data(%{fields: fields, emitter: emitter, root_value: root_value}) do
+      with %{put: _} <- emitter.flags,
+           true <- is_map(root_value) do
+        data = field_data(fields)
+        Map.merge(root_value, data)
+      else
+        _ ->
+          field_data(fields)
+      end
+    end
+
+    defp field_data(fields, acc \\ [])
+    defp field_data([], acc), do: Map.new(acc)
+
+    defp field_data([field | fields], acc) do
+      value = data(field)
+      field_data(fields, [{String.to_existing_atom(field.emitter.name), value} | acc])
+    end
+  end
+
   defmodule PubSub do
     @behaviour Absinthe.Subscription.Pubsub
 
     def start_link() do
-      Registry.start_link(keys: :unique, name: __MODULE__)
+      Registry.start_link(keys: :duplicate, name: __MODULE__)
     end
 
     def node_name() do
@@ -148,6 +190,34 @@ defmodule Absinthe.Execution.SubscriptionTest do
     {:ok, _} = PubSub.start_link()
     {:ok, _} = Absinthe.Subscription.start_link(PubSub)
     :ok
+  end
+
+  @query """
+  subscription ($clientId: ID!) {
+    thing(clientId: $clientId)
+  }
+  """
+  test "should use result_phase from main pipeline" do
+    client_id = "abc"
+
+    assert {:ok, %{"subscribed" => topic}} =
+             run_subscription(
+               @query,
+               Schema,
+               variables: %{"clientId" => client_id},
+               context: %{pubsub: PubSub},
+               result_phase: ResultPhase
+             )
+
+    Absinthe.Subscription.publish(PubSub, %{foo: "bar"}, thing: client_id)
+
+    assert_receive({:broadcast, msg})
+
+    assert %{
+             event: "subscription:data",
+             result: %{data: %{thing: %{foo: "bar"}}},
+             topic: topic
+           } == msg
   end
 
   @query """
@@ -606,6 +676,43 @@ defmodule Absinthe.Execution.SubscriptionTest do
     assert_receive {[:absinthe, :subscription, :publish, :stop], _, %{id: ^id}, _config}
 
     :telemetry.detach(context.test)
+  end
+
+  @query """
+  subscription {
+    otherUser { id }
+  }
+  """
+  test "de-duplicates pushes to the same context" do
+    documents =
+      Enum.map(1..5, fn _index ->
+        {:ok, doc} = run_subscription(@query, Schema, context: %{context_id: "global"})
+        doc
+      end)
+
+    # assert that all documents are the same
+    assert [document] = Enum.dedup(documents)
+
+    Absinthe.Subscription.publish(
+      PubSub,
+      %{id: "global_user_id"},
+      other_user: "*"
+    )
+
+    topic_id = document["subscribed"]
+
+    for _i <- 1..5 do
+      assert_receive(
+        {:broadcast,
+         %{
+           event: "subscription:data",
+           result: %{data: %{"otherUser" => %{"id" => "global_user_id"}}},
+           topic: ^topic_id
+         }}
+      )
+    end
+
+    refute_receive({:broadcast, _})
   end
 
   defp run_subscription(query, schema, opts \\ []) do

@@ -54,7 +54,11 @@ defmodule Absinthe.Type.BuiltIns.Introspection do
   object :__directive do
     description "Represents a directive"
 
-    field :name, non_null(:string)
+    field :name,
+      type: non_null(:string),
+      resolve: fn _, %{adapter: adapter, source: source} ->
+        {:ok, adapter.to_external_name(source.name, :field)}
+      end
 
     field :description, :string
 
@@ -330,6 +334,7 @@ defmodule Absinthe.Type.BuiltIns.Introspection do
           fields
           |> Map.take(Map.keys(value))
           |> Map.values()
+          |> Enum.sort_by(& &1.identifier)
           |> Enum.map(&render_default_value(schema, adapter, &1, value))
           |> Enum.join(", ")
 

@@ -9,33 +9,34 @@ on:
 jobs:
   test:
     name: Elixir ${{matrix.elixir}} / OTP ${{matrix.otp}}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
 
     strategy:
       matrix:
         elixir:
-          - "1.10"
-          - "1.11"
-          - "1.12"
           - "1.13"
+          - "1.14"
+          - "1.15"
         otp:
-          - "22"
-          - "23"
           - "24"
-        exclude:
-          - elixir: "1.10"
-            otp: "24"
+          - "25"
+          - "26"
         include:
-          - elixir: "1.13"
-            otp: "24"
+          - elixir: "1.15"
+            otp: "26"
             format: true
+        exclude:
+          - otp: 26
+            elixir: 1.13
+          - otp: 26
+            elixir: 1.14
 
     steps:
       - name: Checkout
         uses: actions/checkout@v2
 
       - name: Set up Elixir
-        uses: erlef/setup-elixir@v1
+        uses: erlef/setup-beam@v1
         with:
           elixir-version: ${{ matrix.elixir }}
           otp-version: ${{ matrix.otp }}
@@ -69,3 +70,17 @@ jobs:
           mix test
         env:
           SCHEMA_PROVIDER: persistent_term
+
+      - name: Cache/uncache PLTs
+        uses: actions/cache@v3
+        with:
+          path: |
+            priv/plts
+          key: "v1-${{ runner.os }}-\
+                erlang-${{ matrix.otp }}-\
+                elixir-${{ matrix.elixir }}-\
+                ${{ hashFiles('mix.lock') }}"
+
+      - name: Run Dialyzer
+        run: mix dialyzer
+
